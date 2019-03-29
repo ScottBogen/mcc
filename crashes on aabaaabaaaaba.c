@@ -28,7 +28,7 @@
 // two globals for ID:
 
 int lower_id = 1;
-int upper_id = 2000000;       // set to n in main, subtract for each internal node
+int upper_id = 100;       // set to n in main, subtract for each internal node
 int alphabet_length = 5;
 int n;
 
@@ -83,6 +83,9 @@ tree* init() {
     r->start_index = -1;
     r->end_index = -1;
 
+    r->parent = r;
+    r->SL = r;
+
     t->root = r;
     t->u = r;
     return t;
@@ -108,8 +111,22 @@ node* findPath(tree* t, node* v, char* S, int offset) {
         - Make the start index the offset.
         - Make the label length the string length minus the offset
     */
+    if (!v->children) {
+        node* temp = createNode();
+        temp->id = lower_id++;
+        temp->children = NULL;
+        temp->depth = v->depth + temp->label_length;
+        temp->SL = NULL;
+        temp->parent = v;
 
-    if(v->children != NULL) {
+        temp->start_index = offset;
+        temp->end_index = strlen(S) - offset - 1;
+
+        v->children = (node**) malloc(alphabet_length * sizeof(struct Node));
+        v->children[0] = temp;
+    }
+
+    else {
         for (int i = 0; i < alphabet_length; i++) {     // for each child 
             if (v->children[i] != NULL) {                   // if such a child does exist
                 node* child = v->children[i];
@@ -125,7 +142,6 @@ node* findPath(tree* t, node* v, char* S, int offset) {
 
                     if(strncmp(S+child->start_index, S+offset, length) == 0) {        // if they are one in the same, we will have to jump to it 
                         printf("the input string exhausts the label\n");
-
                         printf("time to jump to this kid: id=%d, start index = %d, len = %d\n", child->id, child->start_index, length);
                         node* baby = findPath(t,child, S, offset+length);
                         return baby;
@@ -151,7 +167,6 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                         new_parent->end_index = child->start_index + matches - 1;
                         new_parent->parent = v;
                         new_parent->SL = NULL;
-                        new_parent->depth = v->depth + (new_parent->end_index - new_parent->start_index + 1);
 
                         node* new_child = createNode();
                         new_child->id = lower_id++;
@@ -159,24 +174,23 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                         new_child->end_index = offset + matches + strlen(S+offset+matches) - 1;
                         new_child->parent = new_parent;
                         new_child->SL = NULL;
-                        new_child->depth = new_parent->depth + (new_child->end_index - new_child->start_index + 1);
+
 
                         child->parent = new_parent;
                         child->start_index = child->parent->end_index + 1;
-                        child->depth = new_parent->depth + (child->end_index - child->start_index + 1);
 
                         new_parent->children = (node**) malloc(alphabet_length * sizeof(struct Node));
                         new_parent->children[0] = new_child;
                         new_parent->children[1] = child;
                 
-                        printf("FP1: CREATED NODE with id %d\n", new_parent->id);
-                        printf("FP1: CREATED NODE with id %d\n", new_child->id);
+                        printf("CREATED NODE with id %d\n", new_parent->id);
+                        printf("CREATED NODE with id %d\n", new_child->id);
 
                         sortChildren(new_parent, S);
 
-                        t->u = new_parent;
-                        printf("\tnew u: %d\n", t->u->id);
 
+                        t->u = new_parent; 
+                        printf("\tnew u: %d\n", t->u->id);
 
                         v->children[i] = new_parent;
                         sortChildren(v, S);
@@ -188,42 +202,33 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                 } 
             }
         }
+
+        // if we get down here, it means we have children in v, but were not able to insert due to different 0th string indices
+        // make a new node to be a new child for v.
+
+        printf("Node had no adequate children... let's make one\n");
+
+        // this node will be a LEAF
+        node* temp = createNode();
+        temp->id = lower_id++;
+        temp->children = NULL;
+        temp->start_index = offset;
+        temp->end_index = strlen(S) - offset - 1;
+        temp->SL = NULL;
+        temp->parent = v;
+        temp->children = NULL;
+
+        // insert temp 
+
+        int i = 0;
+        while (v->children[i]) { i++; };
+
+        v->children[i] = temp;
+        sortChildren(v, S);       
+
+        printf("CREATED NODE with id %d\n", temp->id);
+        return temp;    // unlikely we will have to do anything further in this recursive window
     }
-    // if we get down here, it means we have children in v, but were not able to insert due to different 0th string indices
-    // make a new node to be a new child for v.
-
-    printf("Node had no adequate children... let's make one\n");
-
-    // this node will be a LEAF
-    node* temp = createNode();
-    temp->id = lower_id++;
-    temp->children = NULL;
-    temp->start_index = offset;
-    temp->end_index = strlen(S) - 1;    // this end index is correct because the node
-                                        // is a LEAF, thus goes to the end
-    temp->SL = NULL;
-    temp->parent = v;
-    temp->children = NULL;
-    temp->depth = v->depth + (temp->end_index - temp->start_index + 1);
-
-    // insert temp 
-
-    int i = 0;
-
-    if (v->children != NULL) {
-        while (v->children[i]) { 
-            i++; 
-        };
-    } 
-    else {
-        v->children = (node**) malloc(alphabet_length * sizeof(struct Node));
-    }
-
-    v->children[i] = temp;
-    sortChildren(v, S);       
-
-    printf("FP2: CREATED NODE with id %d\n", temp->id);
-    return temp;    // unlikely we will have to do anything further in this recursive window
 }
 
 int compareLabel(char* s1, char* s2, int i, int j) {
@@ -249,16 +254,15 @@ void printNodeInfo(node* temp, char* S) {
 
     printf("\tstart index:\t%d\n", temp->start_index);
     printf("\tend index:\t%d\n", temp->end_index);
-    printf("\tdepth:\t\t%d\n", temp->depth);
 
-    char output[64];
+    //char output[64];
 
-    for (int i = 0; i < 64; i++) { output[i] = 0; }
+    //for (int i = 0; i < 64; i++) { output[i] = 0; }
 
-    strncpy(output, S+temp->start_index, (temp->end_index - temp->start_index + 1));
+    //strncpy(output, S+temp->start_index, (temp->end_index - temp->start_index + 1));
 
-    printf("\tlabel:\t\t%s\n", output);
-    printf("\tSL?\t\t");
+    //printf("\tlabel:\t\t%s\n", output);
+    //printf("\tSL?\t\t");
     if (temp->SL) { printf("%d\n", temp->SL->id); } else {printf("no SL\n");} 
     printf("\n");
 }
@@ -276,33 +280,19 @@ void searchTree(node* n, char* S) {
         }
     }
 
-    printNodeInfo(n,S);
-}
-
-void searchTreeBST(node* n, char* S) {
-    
-    //printf("in node id:%d\n", n->id);
-
-    // search children, l thru r
-    for (int i = 0; i < alphabet_length; i++) {
-        if (n->children != NULL) {
-            if (n->children[i] != NULL) {
-                searchTreeBST(n->children[i], S);
-            }
-        }
-    }
+   printNodeInfo(n,S);
 
     // when it has returned, print the value of n
     
-         
+   /*   
     if (n->children == NULL) {
         if (n->id > 1) {
-            printf("%c", S[n->id-2]);
+            printf("%d\t%c\n", n->id, S[n->id-2]);
         }
         else { 
-            printf("$", n->id);
+            printf("%d\t$\n", n->id);
         }
-    } 
+    } */  
 }
 
 char* readFile(char* file_name) {
@@ -406,8 +396,24 @@ void insert(tree* t, char* S, int i) {
             node* v = u->SL;
             printf("1A: v = %d\n",v->id);
 
-            int alpha_length = v->depth;
-            findPath(t, v, S, i+alpha_length);
+            // findPath(v, s[i+alpha...])
+            if (v == root) {
+                printf("v is root -- simple findpath\n");
+                printf("calling findpath with offset %d", i);
+                findPath(t, v, S, i);
+            }
+            else {
+                printf("v is root -- climb ancestors\n");
+                node* ancestor = v;
+                while (ancestor->parent != root) {
+                    ancestor = ancestor->parent;
+                }
+                int alpha_start = ancestor->start_index;
+                int alpha_end = v->end_index;
+                int alpha_length = alpha_end - alpha_start + 1;
+                printf("1a:  findpath with offset = i(%d) + a(%d)\n", i, alpha_length);
+                findPath(t, v, S, i + alpha_length);
+            }
         }
         // case 1a: u is the root
         else {
@@ -436,52 +442,68 @@ void insert(tree* t, char* S, int i) {
             // alpha_prime is the start index of v_prime's ancestor
             // alpha is alpha_prime_start - 1;
 
+            node* u_ancestor = u_prime;
+            while (u_ancestor->parent != root) {
+                u_ancestor = u_ancestor->parent;
+            }
+
+            int alpha_prime_start = u_ancestor->start_index+1;
+            int alpha_prime_end = u_prime->end_index;
+            int alpha_prime_length = alpha_prime_end - alpha_prime_start + 1; 
+
+            int alpha_start = alpha_prime_start - 1;
+            int alpha_end = alpha_prime_end;
+            int alpha_length = alpha_start - alpha_end + 1;
+
             int beta_start = u->start_index;
             int beta_end = u->end_index;
             int beta_length = beta_end - beta_start + 1;
 
-            int alpha_prime_length = u_prime->depth - 1;
-            int alpha_length = beta_length + alpha_prime_length;
+            printf("2a results:\n");
+            printf("\t Alpha prime-- start=%d, end=%d, length=%d, first char=%c\n",
+                    alpha_prime_start, alpha_prime_end, alpha_prime_length, S[alpha_prime_start]); 
+
+            printf("\t\tS[i]=%c\n", S[i]);
+
+            printf("\t Alpha-- start=%d, end=%d, length=%d, first char=%c\n",
+                    alpha_start, alpha_end, alpha_length, S[alpha_start]); 
+
+            printf("\t Beta-- start=%d, end=%d, length=%d, first char=%c\n",
+                    beta_start, beta_end, beta_length, S[beta_start]);
+                   
+            // if alpha prime start is -1, then v' is the root itself
+
+            // GTGGCGCGAG $
+            // 0123456789 10
+
+            // beta = CG
+
+            printf("v': start index = %d, end index = %d\n", v_prime->start_index, v_prime->end_index);
 
             char* beta = (char*) malloc(beta_length);
             strncpy(beta, S+beta_start, beta_length);
-
-            printf("\n\n2a results:\n");
-            printf("\t Alpha prime-- length=%d\n", alpha_prime_length); 
-            printf("\t Alpha-- length=%d\n", alpha_length); 
-            printf("\t Beta-- length=%d, string=%s\n", beta_length, beta);
-            printf("\t\tS[i]=%c\n", S[i]);
-            printf("v': start index = %d, end index = %d\n", v_prime->start_index, v_prime->end_index);
+            printf("2a: beta start = %d, beta end = %d, beta = %s\n", beta_start, beta_end, beta);
 
             printf("Calling nodehops with v' id = %d, beta = %s, a = %d, string start = %c\n", 
                     v_prime->id, beta, alpha_prime_length, S[i+alpha_prime_length]);
             node* v = nodeHops(v_prime, S, beta, alpha_prime_length);
             printf("v: id = %d\n", v->id);
 
-            t->u = v;
-            u->SL = v;
+            printf("\t%d->SL = %d\n\n", u->id, v->id);
 
-            printf("\t\t%d->SL = %d\n\n", u->id, v->id);
+            printf("Calling findpath for S[i+a]=%c at node %d\n", S[i+alpha_length], v->id);
+            node * curious = findPath(t, v, S, i+alpha_length);
 
-
-            printf("Calling findpath for S[i+a]=%c, offset = %d, at node %d\n", S[i+alpha_length], i+alpha_length, v->id);
-            node * curious = findPath(t, v, S, i+v->depth);
-
-            /*  Temporarily disabling
             if (curious->children == NULL) {
                 printf("return had no children, it's a leaf, set SL to parent %d\n", v->id);
                 u->SL = v;
                 t->u = v;
-                printf("u:%d, SL=%d\n", u->id, v->id);
             }
             else {
-                printf("return had children -- that's our new u. u = %d\n", curious->id);
+                printf("return had children -- that's our new u. u = %d", curious->id);
                 u->SL = curious;
                 t->u = curious;
-                printf("u:%d, SL=%d\n", u->id, curious->id);
             }
-
-            */ 
 
             free(beta);
         }
@@ -490,49 +512,41 @@ void insert(tree* t, char* S, int i) {
         else {
             printf("Case 2B entered\n");
             node* u_prime = u->parent;  // should be root
+            printf("uprime id: %d (should be 0)\n", u_prime->id);
+            int beta_prime_start = u->start_index + 1;        // +1 to remove 1st char
+            int beta_prime_end = u->end_index; 
 
-            int beta_start = u->start_index;
+            int str_length = beta_prime_end - beta_prime_start + 1;
 
-            int beta_length = u->depth;
-            int beta_prime_length = beta_length - 1;
-            printf("Beta' length = %d\n", beta_prime_length);
-
-            if (beta_prime_length <= 0) { 
-                printf("skipping nodehop because Beta' does not exist");
-                node* v = findPath(t, u_prime, S, i);
-                u->SL = root;
-
-                printf("\t\t%d->SL = %d\n\n", u->id, u->SL->id);
-
+            printf("length = %d\n", str_length);
+            if (str_length <= 1) { 
+                findPath(t, u_prime, S, i);
+                t->u = u_prime;
+                u->SL = u_prime;
             }
             else {
-                char* beta_prime = (char*) malloc(beta_prime_length);
-                strncpy(beta_prime, S+i, beta_prime_length);
-                printf("Beta prime = %s\n\n", beta_prime);
+                char* beta = (char*) malloc(str_length);
+                strncpy(beta, S+i, str_length);
 
-                node* v_prime = nodeHops(u_prime, S, beta_prime, 0);
+                printf("BETA = %s\n\n", beta);
+
+                node* v_prime = nodeHops(u_prime, S, beta, 0);
                 printf("exited nodehops with v = id:%d\n", v_prime->id);
 
-                printf("calling FINDPATH on node id %d, offset=%d\n", v_prime->id, i+beta_prime_length);
-                node* v = findPath(t, v_prime, S, i+v_prime->depth);
+                printf("calling FINDPATH on node id %d, offset=%d\n", v_prime->id, i+beta_prime_start - 1);
+                node* v = findPath(t, v_prime, S, i);
                 
-                u->SL = v_prime;
-
-                printf("\t\t%d->SL = %d\n\n", u->id, u->SL->id);
-
-
-                /*  temporarily disabiling this... it might just always be v->parent
                 if (v->children == NULL) {
                     // v is a leaf, set SL to the parent instead
-                    u->SL = v->parent;
-                    t->u = v->parent;
+                    u->SL = v_prime;
+                    t->u = v_prime;
                 }
                 else { 
                     u->SL = v;
                     t->u = v;
-                }*/ 
+                }
 
-                free(beta_prime);
+                free(beta);
             }
         }
     }
@@ -541,12 +555,8 @@ void insert(tree* t, char* S, int i) {
 
 node* nodeHops(node* n, char* S, char* beta, int offset) {  
     
-    printf("\nEntered nodehops for node %d with beta = %s and offset = %d\n", n->id, beta, offset);
+    printf("\nEntered nodehops with beta = %s and offset = %d\n", beta, offset);
 
-    if (offset > strlen(beta)) {
-        printf("the offset exceeds the length of Beta, we're returning from node %d\n", n->id);
-        return n->parent;
-    }
 
     if (!n->children) { return n->parent;}      // leaf nodes do us no good
 
@@ -591,7 +601,6 @@ int main(int argc, char** argv) {
 
     
     //GTGGCGCGAG$
-    // goes great to i < 7
     for (int i = 0; i < n; i++) {
         printf("--- ITERATION #%d, c=%c ---\n", i, S[i]);
         //findPath(t, t->root, S, i);
@@ -600,8 +609,7 @@ int main(int argc, char** argv) {
 
     // search tree
     printf("---SEARCH TREE---\n");
-    //searchTree(t->root, S);
-    searchTreeBST(t->root, S);
+    searchTree(t->root, S);
 
     printf("u = %d\n", t->u->id);
     

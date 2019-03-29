@@ -28,9 +28,8 @@
 // two globals for ID:
 
 int lower_id = 1;
-int upper_id = 2000000;       // set to n in main, subtract for each internal node
+int upper_id = 100;       // set to n in main, subtract for each internal node
 int alphabet_length = 5;
-int n;
 
 typedef struct Node {
     int id;
@@ -83,6 +82,9 @@ tree* init() {
     r->start_index = -1;
     r->end_index = -1;
 
+    r->parent = r;
+    r->SL = r;
+
     t->root = r;
     t->u = r;
     return t;
@@ -108,8 +110,22 @@ node* findPath(tree* t, node* v, char* S, int offset) {
         - Make the start index the offset.
         - Make the label length the string length minus the offset
     */
+    if (!v->children) {
+        node* temp = createNode();
+        temp->id = lower_id++;
+        temp->children = NULL;
+        temp->depth = v->depth + temp->label_length;
+        temp->SL = NULL;
+        temp->parent = v;
 
-    if(v->children != NULL) {
+        temp->start_index = offset;
+        temp->end_index = strlen(S) - offset - 1;
+
+        v->children = (node**) malloc(alphabet_length * sizeof(struct Node));
+        v->children[0] = temp;
+    }
+
+    else {
         for (int i = 0; i < alphabet_length; i++) {     // for each child 
             if (v->children[i] != NULL) {                   // if such a child does exist
                 node* child = v->children[i];
@@ -125,7 +141,6 @@ node* findPath(tree* t, node* v, char* S, int offset) {
 
                     if(strncmp(S+child->start_index, S+offset, length) == 0) {        // if they are one in the same, we will have to jump to it 
                         printf("the input string exhausts the label\n");
-
                         printf("time to jump to this kid: id=%d, start index = %d, len = %d\n", child->id, child->start_index, length);
                         node* baby = findPath(t,child, S, offset+length);
                         return baby;
@@ -151,7 +166,6 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                         new_parent->end_index = child->start_index + matches - 1;
                         new_parent->parent = v;
                         new_parent->SL = NULL;
-                        new_parent->depth = v->depth + (new_parent->end_index - new_parent->start_index + 1);
 
                         node* new_child = createNode();
                         new_child->id = lower_id++;
@@ -159,24 +173,23 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                         new_child->end_index = offset + matches + strlen(S+offset+matches) - 1;
                         new_child->parent = new_parent;
                         new_child->SL = NULL;
-                        new_child->depth = new_parent->depth + (new_child->end_index - new_child->start_index + 1);
+
 
                         child->parent = new_parent;
                         child->start_index = child->parent->end_index + 1;
-                        child->depth = new_parent->depth + (child->end_index - child->start_index + 1);
 
                         new_parent->children = (node**) malloc(alphabet_length * sizeof(struct Node));
                         new_parent->children[0] = new_child;
                         new_parent->children[1] = child;
                 
-                        printf("FP1: CREATED NODE with id %d\n", new_parent->id);
-                        printf("FP1: CREATED NODE with id %d\n", new_child->id);
+                        printf("CREATED NODE with id %d\n", new_parent->id);
+                        printf("CREATED NODE with id %d\n", new_child->id);
 
                         sortChildren(new_parent, S);
 
-                        t->u = new_parent;
-                        printf("\tnew u: %d\n", t->u->id);
 
+                        t->u = new_parent; 
+                        printf("\tnew u: %d\n", t->u->id);
 
                         v->children[i] = new_parent;
                         sortChildren(v, S);
@@ -188,42 +201,35 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                 } 
             }
         }
+
+        // if we get down here, it means we have children in v, but were not able to insert due to different 0th string indices
+        // make a new node to be a new child for v.
+
+        printf("Node had no adequate children... let's make one\n");
+
+        // this node will be a LEAF
+        node* temp = createNode();
+        temp->id = lower_id++;
+        temp->children = NULL;
+        temp->start_index = offset;
+        temp->end_index = strlen(S) - 1;
+        temp->SL = NULL;
+        temp->parent = v;
+        temp->children = NULL;
+
+        // insert temp 
+
+        int i = 0;
+        while (v->children[i]) { i++; };
+
+        int position = i;
+
+        v->children[i] = temp;
+        sortChildren(v, S);       
+
+        printf("CREATED NODE with id %d\n", temp->id);
+        return v->children[i];    // unlikely we will have to do anything further in this recursive window
     }
-    // if we get down here, it means we have children in v, but were not able to insert due to different 0th string indices
-    // make a new node to be a new child for v.
-
-    printf("Node had no adequate children... let's make one\n");
-
-    // this node will be a LEAF
-    node* temp = createNode();
-    temp->id = lower_id++;
-    temp->children = NULL;
-    temp->start_index = offset;
-    temp->end_index = strlen(S) - 1;    // this end index is correct because the node
-                                        // is a LEAF, thus goes to the end
-    temp->SL = NULL;
-    temp->parent = v;
-    temp->children = NULL;
-    temp->depth = v->depth + (temp->end_index - temp->start_index + 1);
-
-    // insert temp 
-
-    int i = 0;
-
-    if (v->children != NULL) {
-        while (v->children[i]) { 
-            i++; 
-        };
-    } 
-    else {
-        v->children = (node**) malloc(alphabet_length * sizeof(struct Node));
-    }
-
-    v->children[i] = temp;
-    sortChildren(v, S);       
-
-    printf("FP2: CREATED NODE with id %d\n", temp->id);
-    return temp;    // unlikely we will have to do anything further in this recursive window
 }
 
 int compareLabel(char* s1, char* s2, int i, int j) {
@@ -248,8 +254,7 @@ void printNodeInfo(node* temp, char* S) {
     if (temp->children) { printf("yes\n"); } else { printf("no\n"); }
 
     printf("\tstart index:\t%d\n", temp->start_index);
-    printf("\tend index:\t%d\n", temp->end_index);
-    printf("\tdepth:\t\t%d\n", temp->depth);
+    //printf("\tend index:\t%d\n", temp->end_index);
 
     char output[64];
 
@@ -276,33 +281,20 @@ void searchTree(node* n, char* S) {
         }
     }
 
-    printNodeInfo(n,S);
-}
+    //printNodeInfo(n,S);
 
-void searchTreeBST(node* n, char* S) {
-    
-    //printf("in node id:%d\n", n->id);
-
-    // search children, l thru r
-    for (int i = 0; i < alphabet_length; i++) {
-        if (n->children != NULL) {
-            if (n->children[i] != NULL) {
-                searchTreeBST(n->children[i], S);
-            }
-        }
-    }
 
     // when it has returned, print the value of n
-    
-         
+     
     if (n->children == NULL) {
         if (n->id > 1) {
-            printf("%c", S[n->id-2]);
+            printf("%d\t%c\n", n->id, S[n->id-2]);
         }
         else { 
-            printf("$", n->id);
+            printf("%d\t$\n", n->id);
         }
-    } 
+    }
+     
 }
 
 char* readFile(char* file_name) {
@@ -320,7 +312,8 @@ char* readFile(char* file_name) {
 
     while(getline(&line, &len, fp) != -1) {
         if (line[0] != '>') {
-            while (line[i] != '\0' && line[i] != '\n') {
+            printf("%s\n", line);
+            while (line[i] != '\0') {
                 string_length++;
                 i++;
             }
@@ -341,7 +334,7 @@ char* readFile(char* file_name) {
 
     while(getline(&line, &len, fp) != -1) {
         if (line[0] != '>') {
-            while (line[i] != '\0' && line[i] != '\n') {
+            while (line[i] != '\0') {
                 S[string_length++] = line[i++];
             }
             i = 0;
@@ -354,7 +347,56 @@ char* readFile(char* file_name) {
 
 }
 
+int main(int argc, char** argv) {
 
+    char* S = readFile("s3.fasta");
+
+    // call pre-process (get input string, get alphabet, set variables)
+    //char* S = "BANANA$";
+    int n = strlen(S);
+    char* alphabet = "$ACGT";
+
+    // create tree struct
+    tree* t = init();
+
+    //t->root->parent = t->root;
+
+    // populate tree
+     
+    for (int i = 0; i < n-1; i++) {
+        //findPath(t, t->root, S, i);
+    }
+    
+    //GTGGCGCGAG$
+    for (int i = 0; i < n; i++) {
+        printf("--- ITERATION #%d, c=%c ---\n", i, S[i]);
+        //findPath(t, t->root, S, i);
+        insert(t, S, i);
+    }
+
+    //insert(t, S, 0);
+    //insert(t, S, 1);
+    //insert(t, S, 2);
+    //insert(t, S, 3);
+
+    // search tree
+    printf("---SEARCH TREE---\n");
+    searchTree(t->root, S);
+
+    printf("u = %d\n", t->u->id);
+    
+    //      banana$
+    //      0123456
+
+    //for (int i = 1; i < n; i++) {
+        // insert (String, start index)
+        //insert(t, S, i-1);
+    //}
+
+    // run API
+
+    return 0;
+}
 
 // len = num children
 void sortChildren(node* n, char* S) {
@@ -383,10 +425,8 @@ void sortChildren(node* n, char* S) {
 }
 
 
-
 // ex: insert(t, S, 1) --> insert("anana$");
 void insert(tree* t, char* S, int i) {
-    printf("entered insert...\n");
 
     // make local pointers
     node* root = t->root;
@@ -394,8 +434,9 @@ void insert(tree* t, char* S, int i) {
 
     // check cases
 
-    printf("current u id: %d\n", u->id);
+    printf("entered insert...\n");
 
+    printf("u id = %d\n", u->id);
     // cases 1-2: SL(u) is known
     if (u->SL != NULL) {
         printf("not root\n");
@@ -404,12 +445,10 @@ void insert(tree* t, char* S, int i) {
             printf("Case 1A entered\n");
             // take SL(u) to v
             node* v = u->SL;
-            printf("1A: v = %d\n",v->id);
-
-            int alpha_length = v->depth;
-            findPath(t, v, S, i+alpha_length);
+            // findPath(v, s[i+alpha...])
+            findPath(t, v, S, i + v->start_index); // +1 to remove 
         }
-        // case 1a: u is the root
+        // case 2: u is the root
         else {
             printf("Case 1B entered\n");
             // go to parent u 
@@ -419,201 +458,134 @@ void insert(tree* t, char* S, int i) {
         }
     }
 
-    // cases 2A-2B: SL(u) is known
+    // cases 3-4: SL(u) is known
     else {
-        // case 2A: u' is not the root
+        // case 3: u' is not the root
+        printf("root\n");
         if (u->parent != root) {
             printf("Case 2A entered\n");
-            
             node* u_prime = u->parent;
-            printf("2A: Go from u (%d) to u' (%d)\n", u->id, u_prime->id);
+
+            printf("UPRIME = %d\n", u_prime->id);
+
+            if (!u_prime->SL) { 
+                printf("OH SHIT OF UCK OOH FUCK\n");
+            }
+
             node* v_prime = u_prime->SL;
-            printf("2A: Take SL(u'=%d) to v'=%d\n", u_prime->id, v_prime->id);
 
-            // get indices of: alpha, alpha_prime, and beta
-            // beta will also need to be made into a string
-            
-            // alpha_prime is the start index of v_prime's ancestor
-            // alpha is alpha_prime_start - 1;
+            node* ancestor = u_prime;
 
-            int beta_start = u->start_index;
+            while (ancestor->parent != root) { ancestor = ancestor->parent; }
+
+            printf("case3: my ancestor's id is %d w start index %d and end index %d\n", ancestor->id, ancestor->start_index, ancestor->end_index);
+
+            int beta_start = u->start_index; 
             int beta_end = u->end_index;
-            int beta_length = beta_end - beta_start + 1;
 
-            int alpha_prime_length = u_prime->depth - 1;
-            int alpha_length = beta_length + alpha_prime_length;
+            int alpha_prime_start = v_prime->start_index;
+            int alpha_prime_end = v_prime->end_index;
 
-            char* beta = (char*) malloc(beta_length);
-            strncpy(beta, S+beta_start, beta_length);
+            //printf("VPRIME ID = %d\n\n\n\n", v_prime->id);
 
-            printf("\n\n2a results:\n");
-            printf("\t Alpha prime-- length=%d\n", alpha_prime_length); 
-            printf("\t Alpha-- length=%d\n", alpha_length); 
-            printf("\t Beta-- length=%d, string=%s\n", beta_length, beta);
-            printf("\t\tS[i]=%c\n", S[i]);
-            printf("v': start index = %d, end index = %d\n", v_prime->start_index, v_prime->end_index);
+            int str_length = beta_end - beta_start + 1;
 
-            printf("Calling nodehops with v' id = %d, beta = %s, a = %d, string start = %c\n", 
-                    v_prime->id, beta, alpha_prime_length, S[i+alpha_prime_length]);
-            node* v = nodeHops(v_prime, S, beta, alpha_prime_length);
-            printf("v: id = %d\n", v->id);
-
-            t->u = v;
-            u->SL = v;
-
-            printf("\t\t%d->SL = %d\n\n", u->id, v->id);
-
-
-            printf("Calling findpath for S[i+a]=%c, offset = %d, at node %d\n", S[i+alpha_length], i+alpha_length, v->id);
-            node * curious = findPath(t, v, S, i+v->depth);
-
-            /*  Temporarily disabling
-            if (curious->children == NULL) {
-                printf("return had no children, it's a leaf, set SL to parent %d\n", v->id);
+            if (str_length <= 1 || alpha_prime_start - alpha_prime_end == 0) {
+                printf("BETA is too short, going to findpath right away\n");
+                node* v = findPath(t, root, S, i);
                 u->SL = v;
                 t->u = v;
-                printf("u:%d, SL=%d\n", u->id, v->id);
+                printf("setting suffix links to %d\n", v->id);
+                
             }
-            else {
-                printf("return had children -- that's our new u. u = %d\n", curious->id);
-                u->SL = curious;
-                t->u = curious;
-                printf("u:%d, SL=%d\n", u->id, curious->id);
+            else { 
+                char* beta = (char*) malloc(str_length);
+                strncpy(beta, S+beta_start, str_length);
+                printf("2a: beta start = %d, beta end = %d\n", beta_start, beta_end);
+
+                node* v_parent = nodeHops(v_prime, S, beta, 0);
+                printf("exited nodehops with vparent = id:%d\n", v_parent->id);
+                printf("calling FINDPATH on node id=%d, offset=%d\n", v_parent->id, i + (ancestor->end_index - ancestor->start_index + 1));
+                node* v = findPath(t, v_parent, S, i + (ancestor->end_index - ancestor->start_index + 1));  //-1 because it's alpha, not alpha prime
+                // note: above line was +1 before I touched it, that's what worked with mississippi
+                u->SL = v;
+                t->u = v;
+                printf("shitting suffix links to %d\n", v_prime->id);
+
+                free(beta); 
             }
 
-            */ 
-
-            free(beta);
+            //node* v = nodeHops(v_prime, S, beta, 0);
+            // make a beta for the above line to use 
+            //u->SL = v;
+            //findPath(t, v, S, i + alpha);
         }
 
         // case 4: u' is the root
         else {
             printf("Case 2B entered\n");
             node* u_prime = u->parent;  // should be root
+            printf("uprime id: %d (should be 0)\n", u_prime->id);
+            int beta_prime_start = u->start_index + 1;        // +1 to remove 1st char
+            int beta_prime_end = u->end_index; 
 
-            int beta_start = u->start_index;
+            int str_length = beta_prime_end - beta_prime_start + 1;
 
-            int beta_length = u->depth;
-            int beta_prime_length = beta_length - 1;
-            printf("Beta' length = %d\n", beta_prime_length);
-
-            if (beta_prime_length <= 0) { 
-                printf("skipping nodehop because Beta' does not exist");
+            if (str_length <= 1) { 
                 node* v = findPath(t, u_prime, S, i);
-                u->SL = root;
-
-                printf("\t\t%d->SL = %d\n\n", u->id, u->SL->id);
-
+                u->SL = v;
+                t->u = v;
             }
             else {
-                char* beta_prime = (char*) malloc(beta_prime_length);
-                strncpy(beta_prime, S+i, beta_prime_length);
-                printf("Beta prime = %s\n\n", beta_prime);
+                char* beta = (char*) malloc(str_length);
+                strncpy(beta, S+i, str_length);
 
-                node* v_prime = nodeHops(u_prime, S, beta_prime, 0);
+                node* v_prime = nodeHops(u_prime, S, beta, 0);
                 printf("exited nodehops with v = id:%d\n", v_prime->id);
 
-                printf("calling FINDPATH on node id %d, offset=%d\n", v_prime->id, i+beta_prime_length);
-                node* v = findPath(t, v_prime, S, i+v_prime->depth);
+                printf("calling FINDPATH on node id %d, offset=%d\n", v_prime->id, i+beta_prime_start - 1);
+                node* v = findPath(t, v_prime, S, i);
                 
-                u->SL = v_prime;
+                u->SL = v;
+                t->u = v;
 
-                printf("\t\t%d->SL = %d\n\n", u->id, u->SL->id);
-
-
-                /*  temporarily disabiling this... it might just always be v->parent
-                if (v->children == NULL) {
-                    // v is a leaf, set SL to the parent instead
-                    u->SL = v->parent;
-                    t->u = v->parent;
-                }
-                else { 
-                    u->SL = v;
-                    t->u = v;
-                }*/ 
-
-                free(beta_prime);
+                printf("case 2b: %d->SL = %d\n", u->id, v->id);
+                free(beta);
             }
         }
     }
 }
 
+/*                                  beta_offset will be 0 on first call, and will track where in Beta we are as we move across strings 
+    nodeHops(node* n, char* S, char* beta, int offset) {  
+        for (int i = 0; i < alphabet_length; i++) {
+            if (n->children[i]) {
+                node* child = n->children[i];
+                if (S[child->start_index] == B[offset]) {
+                    printf("hopping to child[%d], id = %d\n", i, child->id);
+                    return nodeHops(child, S, beta, offset+(child->end_index - child->start_index + 1);
+                } 
+            }
+        }
+        printf("no matching children were found in nodehops\n");
+        return n;   // base case: no matching children are found, this is our node.
+    }
+
+*/
 
 node* nodeHops(node* n, char* S, char* beta, int offset) {  
     
-    printf("\nEntered nodehops for node %d with beta = %s and offset = %d\n", n->id, beta, offset);
-
-    if (offset > strlen(beta)) {
-        printf("the offset exceeds the length of Beta, we're returning from node %d\n", n->id);
-        return n->parent;
-    }
-
     if (!n->children) { return n->parent;}      // leaf nodes do us no good
 
     for (int i = 0; i < alphabet_length; i++) {
         if (n->children[i]) {
-            printf("NH: Looking at child[%d], id=%d\n", i, n->children[i]->id);
             node* child = n->children[i];
             if (S[child->start_index] == beta[offset]) {
                 printf("hopping to child[%d], id = %d\n", i, child->id);
-
-                // 
                 return nodeHops(child, S, beta, offset+(child->end_index - child->start_index + 1));
             } 
-            else { 
-                printf("child didn't match: label[0] = %c, beta[offset] = %c\n",
-                S[n->children[i]->start_index], beta[offset]);
-            }
         }
     }
     printf("no matching children were found in nodehops\n");
-    return n;   // base case: no matching children are found, the parent is our node.
-}
-
-
-
-    /* MAIN */ 
-
-int main(int argc, char** argv) {
-
-    //char* S = readFile("Human-BRCA2-cds.fasta");
-    char* S = readFile("Human-BRCA2-cds.fasta");
-
-    // call pre-process (get input string, get alphabet, set variables)
-    //char* S = "BANANA$";
-    int n = strlen(S);
-    char* alphabet = "$ACGT";
-
-    // create tree struct
-    tree* t = init();
-
-    //t->root->parent = t->root;
-
-    
-    //GTGGCGCGAG$
-    // goes great to i < 7
-    for (int i = 0; i < n; i++) {
-        printf("--- ITERATION #%d, c=%c ---\n", i, S[i]);
-        //findPath(t, t->root, S, i);
-        insert(t, S, i);
-    }
-
-    // search tree
-    printf("---SEARCH TREE---\n");
-    //searchTree(t->root, S);
-    searchTreeBST(t->root, S);
-
-    printf("u = %d\n", t->u->id);
-    
-    //      banana$
-    //      0123456
-
-    //for (int i = 1; i < n; i++) {
-        // insert (String, start index)
-        //insert(t, S, i-1);
-    //}
-
-    // run API
-
-    return 0;
+    return n->parent;   // base case: no matching children are found, the parent is our node.
 }
